@@ -33,7 +33,7 @@ UINT GetModelIndexByName(const char* modelName)
 
 	for (UINT i = 0; i < 1024; i++)
 	{
-		DWORD nsdi_i = (DWORD)ReadMem(hProcess, nsdi + i * 0x34 + 0xC, NULL, sizeof(DWORD));
+		DWORD nsdi_i = (DWORD)ReadMem(hProcess, nsdi + 0xC + i * 0x34, NULL, sizeof(DWORD));
 		char str[128] = { 0 };
 		if (ReadMem(hProcess, nsdi_i, str, sizeof(str)))
 		{
@@ -151,15 +151,16 @@ UINT LoadSkins(const char* file, char*** names, UINT** values)
 		char line[64];
 		while (fgets(line, sizeof(line), fp))
 		{
-			// remove trailing newline char
-			size_t len = strlen(line) - 1;
-			if (line[len] == '\n') {
-				line[len] = '\0';
-			}
-
-			// use this for splitting lines
+			// use this for verifying & splitting lines
 			char* pch = strstr(line, ": ");
 			if (!pch) { continue; }
+
+			// remove trailing newline char
+			size_t len = strlen(line) - 1;
+			if (line[len] == '\n')
+			{
+				line[len] = '\0';
+			}
 
 			*values = (UINT*)realloc(*values, (i + 1) * sizeof(UINT));
 			(*values)[i] = atoi(line);
@@ -202,8 +203,8 @@ void SortSkins(UINT count, char*** names, UINT** values)
 
 void PrintMenu(const char* title, char** name, UINT sz, UINT x)
 {
-	Sleep(sz < 20 ? 150 : 20);
-	printf("%s %s %s %s\t\t\t\r", title, x > 0 ? "<" : "|", name[x], x < sz ? ">" : "|");
+	printf("%s %c %s %c\t\t\t\r", title, x > 0 ? '<' : '|', name[x], x < sz ? '>' : '|');
+	Sleep(sz < 20 ? 150 : 35);
 }
 UINT ItemSelect(const char* title, char** name, UINT sz)
 {
@@ -222,6 +223,7 @@ UINT ItemSelect(const char* title, char** name, UINT sz)
 		}
 	}
 
+	printf("%s %s\t\t\t\n", title, name[x]);
 	Sleep(50);
 	return x;
 }
@@ -320,13 +322,9 @@ int main()
 	printf("[+] Loaded %d skins from file\n", count);
 	SortSkins(count, &skinNames, &skinIDs);
 
-	UINT knifeID = ItemSelect("Select your knife model:", knifeNames, sizeof(knifeIDs) / sizeof(knifeIDs[0]) - 1);
-	printf("\n");
-	UINT skinID = ItemSelect("Select your knife skin:", skinNames, count - 1);
-	printf("\n");
-
-	printf("[+] Selected knife: %s | %s\n", knifeNames[knifeID], skinNames[skinID]);
-	UINT chosenSkin = skinIDs[skinID];
+	UINT knifeID = ItemSelect("[+] Knife model:", knifeNames, sizeof(knifeIDs) / sizeof(knifeIDs[0]) - 1);
+	UINT skinID = ItemSelect("[+] Knife skin:", skinNames, count - 1);
+	skinID = skinIDs[skinID];
 
 	free(skinNames);
 	free(skinIDs);
@@ -349,7 +347,7 @@ int main()
 	hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
 	if (hProcess == INVALID_HANDLE_VALUE)
 	{
-		printf("[!] Error opening handle to csgo!\n");
+		printf("[!] Error opening handle to CSGO!\n");
 		return 1;
 	}
 
@@ -485,7 +483,7 @@ int main()
 		m_nModelIndex)
 	{
 		// start main thread
-		xSkins(knifeIDs[knifeID], chosenSkin);
+		xSkins(knifeIDs[knifeID], skinID);
 	}
 
 	CloseHandle(hProcess);
