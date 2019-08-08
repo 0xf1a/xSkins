@@ -1,4 +1,4 @@
-![Screenshot](https://i.imgur.com/4D5YEdZ.png)
+![Screenshot](https://i.imgur.com/MmPrQqx.png)
 
 # xSkins: External Knife & Skin Changer for CSGO
 
