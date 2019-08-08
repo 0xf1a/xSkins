@@ -329,19 +329,19 @@ int main()
 	free(skinNames);
 	free(skinIDs);
 
-	DWORD dwProcessId = GetProcessIdByProcessName("csgo.exe");
+	DWORD dwProcessId = GetProcessIdByProcessName(_T("csgo.exe"));
 	printf("[+] csgo.exe process id: %d\n", dwProcessId);
 
-	DWORD dwClientBase = GetModuleBaseAddress(dwProcessId, "client_panorama.dll");
+	DWORD dwClientBase = GetModuleBaseAddress(dwProcessId, _T("client_panorama.dll"));
 	printf("[+] client_panorama.dll base: 0x%x\n", dwClientBase);
 
-	DWORD dwClientSize = GetModuleSize(dwProcessId, "client_panorama.dll");
+	DWORD dwClientSize = GetModuleSize(dwProcessId, _T("client_panorama.dll"));
 	printf("[+] client_panorama.dll size: 0x%x\n", dwClientSize);
 
-	DWORD dwEngineBase = GetModuleBaseAddress(dwProcessId, "engine.dll");
+	DWORD dwEngineBase = GetModuleBaseAddress(dwProcessId, _T("engine.dll"));
 	printf("[+] engine.dll base: 0x%x\n", dwEngineBase);
 
-	DWORD dwEngineSize = GetModuleSize(dwProcessId, "engine.dll");
+	DWORD dwEngineSize = GetModuleSize(dwProcessId, _T("engine.dll"));
 	printf("[+] engine.dll size: 0x%x\n", dwEngineSize);
 
 	hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
@@ -421,15 +421,13 @@ int main()
 			(dwGetAllClasses >> 8 * 3) & 0xFF
 		};
 
-		// this dynamic pattern requires an unique generated wildcard
-		UCHAR wc = GetWildcard(bGetAllClasses2, sizeof(bGetAllClasses2), 0x0);
 		dwGetAllClasses = FindPattern(hProcess,
 			dwClientBase,
 			dwClientSize,
 			pbClient,
 			bGetAllClasses2,
 			sizeof(bGetAllClasses2),
-			wc,
+			0x00,
 			0x2B,
 			0x0,
 			TRUE,

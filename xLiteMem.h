@@ -1,11 +1,12 @@
 #pragma once
 #include <Windows.h>
 #include <TlHelp32.h>
+#include <tchar.h>
 
 /*
 ** WinAPI process and memory functions
 */
-DWORD GetProcessIdByProcessName(LPCSTR name)
+DWORD GetProcessIdByProcessName(LPCTSTR name)
 {
 	DWORD dwPid = 0;
 
@@ -21,7 +22,7 @@ DWORD GetProcessIdByProcessName(LPCSTR name)
 		{
 			do
 			{
-				if (_stricmp(ProcessEntry32.szExeFile, name) == 0)
+				if (_tcsicmp(ProcessEntry32.szExeFile, name) == 0)
 				{
 					dwPid = ProcessEntry32.th32ProcessID;
 					break;
@@ -34,7 +35,7 @@ DWORD GetProcessIdByProcessName(LPCSTR name)
 
 	return dwPid;
 }
-DWORD GetProcessIdByWindowName(LPCSTR name)
+DWORD GetProcessIdByWindowName(LPCTSTR name)
 {
 	DWORD dwPid = 0;
 
@@ -47,7 +48,7 @@ DWORD GetProcessIdByWindowName(LPCSTR name)
 
 	return dwPid;
 }
-DWORD GetModuleBaseAddress(DWORD pid, LPCSTR name)
+DWORD GetModuleBaseAddress(DWORD pid, LPCTSTR name)
 {
 	DWORD dwBase = 0;
 
@@ -62,7 +63,7 @@ DWORD GetModuleBaseAddress(DWORD pid, LPCSTR name)
 		{
 			do
 			{
-				if (_stricmp(ModuleEntry32.szModule, name) == 0)
+				if (_tcsicmp(ModuleEntry32.szModule, name) == 0)
 				{
 					dwBase = (DWORD)ModuleEntry32.modBaseAddr;
 					break;
@@ -75,7 +76,7 @@ DWORD GetModuleBaseAddress(DWORD pid, LPCSTR name)
 
 	return dwBase;
 }
-DWORD GetModuleSize(DWORD pid, LPCSTR name)
+DWORD GetModuleSize(DWORD pid, LPCTSTR name)
 {
 	DWORD dwSize = 0;
 
@@ -90,7 +91,7 @@ DWORD GetModuleSize(DWORD pid, LPCSTR name)
 		{
 			do
 			{
-				if (_stricmp(ModuleEntry32.szModule, name) == 0)
+				if (_tcsicmp(ModuleEntry32.szModule, name) == 0)
 				{
 					dwSize = ModuleEntry32.modBaseSize;
 					break;
@@ -117,20 +118,6 @@ BOOL WriteMem(HANDLE process, DWORD address, LPCVOID buffer, DWORD size)
 /*
 ** Offset scanning functions
 */
-UCHAR GetWildcard(PBYTE pattern, UINT length, UCHAR wildcard)
-{
-	UCHAR wc = wildcard;
-
-	for (UINT i = 0; i < length; i++)
-	{
-		if (pattern[i] == wc)
-		{
-			wc = GetWildcard(pattern, length, ++wc);
-		}
-	}
-
-	return wc;
-}
 BOOLEAN CompareBytes(PBYTE bytes, PBYTE pattern, UINT length, UCHAR wildcard)
 {
 	for (UINT i = 0; i < length; i++)
@@ -262,7 +249,9 @@ DWORD ScanTable(HANDLE handle, DWORD table, LPCSTR varname, DWORD level)
 
 		char szPropName[128] = { 0 };
 		if (!GetPropName(handle, dwPropAddr, szPropName) ||
-			isdigit(szPropName[0])) { continue; }
+			isdigit(szPropName[0])) {
+			continue;
+		}
 
 		int iOffset = GetOffset(handle, dwPropAddr);
 
