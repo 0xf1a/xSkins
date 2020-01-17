@@ -17,25 +17,26 @@ DWORD m_iItemDefinitionIndex = 0;
 DWORD m_hActiveWeapon = 0;
 DWORD m_hMyWeapons = 0;
 DWORD m_nModelIndex = 0;
+DWORD m_dwModelPrecache = 0;
 
 UINT GetModelIndexByName(const char* modelName)
 {
-	DWORD cstate = (DWORD)ReadMem(hProcess, dwClientState, NULL, sizeof(DWORD));
+	DWORD cstate = (DWORD)ReadMemory(hProcess, dwClientState, NULL, sizeof(DWORD));
 
 	// CClientState + 0x529C -> INetworkStringTable* m_pModelPrecacheTable
-	DWORD nst = (DWORD)ReadMem(hProcess, cstate + 0x529C, NULL, sizeof(DWORD));
+	DWORD nst = (DWORD)ReadMemory(hProcess, cstate + m_dwModelPrecache, NULL, sizeof(DWORD));
 
 	// INetworkStringTable + 0x40 -> INetworkStringDict* m_pItems
-	DWORD nsd = (DWORD)ReadMem(hProcess, nst + 0x40, NULL, sizeof(DWORD));
+	DWORD nsd = (DWORD)ReadMemory(hProcess, nst + 0x40, NULL, sizeof(DWORD));
 
 	// INetworkStringDict + 0xC -> void* m_pItems
-	DWORD nsdi = (DWORD)ReadMem(hProcess, nsd + 0xC, NULL, sizeof(DWORD));
+	DWORD nsdi = (DWORD)ReadMemory(hProcess, nsd + 0xC, NULL, sizeof(DWORD));
 
 	for (UINT i = 0; i < 1024; i++)
 	{
-		DWORD nsdi_i = (DWORD)ReadMem(hProcess, nsdi + 0xC + i * 0x34, NULL, sizeof(DWORD));
+		DWORD nsdi_i = (DWORD)ReadMemory(hProcess, nsdi + 0xC + i * 0x34, NULL, sizeof(DWORD));
 		char str[128] = { 0 };
-		if (ReadMem(hProcess, nsdi_i, str, sizeof(str)))
+		if (ReadMemory(hProcess, nsdi_i, str, sizeof(str)))
 		{
 			if (_stricmp(str, modelName) == 0)
 			{
@@ -98,6 +99,21 @@ UINT GetModelIndex(const short itemIndex)
 		break;
 	case WEAPON_KNIFE_WIDOWMAKER:
 		ret = GetModelIndexByName("models/weapons/v_knife_widowmaker.mdl");
+		break;
+	case WEAPON_KNIFE_CSS:
+		ret = GetModelIndexByName("models/weapons/v_knife_css.mdl");
+		break;
+	case WEAPON_KNIFE_CORD:
+		ret = GetModelIndexByName("models/weapons/v_knife_cord.mdl");
+		break;
+	case WEAPON_KNIFE_CANIS:
+		ret = GetModelIndexByName("models/weapons/v_knife_canis.mdl");
+		break;
+	case WEAPON_KNIFE_OUTDOOR:
+		ret = GetModelIndexByName("models/weapons/v_knife_outdoor.mdl");
+		break;
+	case WEAPON_KNIFE_SKELETON:
+		ret = GetModelIndexByName("models/weapons/v_knife_skeleton.mdl");
 		break;
 	default:
 		break;
@@ -178,13 +194,14 @@ UINT LoadSkins(const char* file, char*** names, UINT** values)
 }
 void SortSkins(UINT count, char*** names, UINT** values)
 {
-	UINT vtmp;
-	char* ntmp;
+	UINT vtmp = 0;
+	char* ntmp = NULL;
 
-	// bubble sort algorithm
-	for (UINT i = 0; i < count; i++)
+	// use bubble sort algorithm to sort skins alphabetically
+	// start from 1 to keep vanilla skin as the first choice
+	for (UINT i = 1; i < count; i++)
 	{
-		for (UINT j = 0; j < count; j++)
+		for (UINT j = 1; j < count; j++)
 		{
 			if (strcmp((*names)[i], (*names)[j]) < 0)
 			{
@@ -242,7 +259,7 @@ void xSkins(const short knifeIndex, const UINT knifeSkin)
 		// model index is different for each server and map
 		// below is a simple way to keep track of local base in order to reset model index
 		// while also avoiding doing unnecessary extra reads because of the external RPM overhead
-		DWORD tempPlayer = (DWORD)ReadMem(hProcess, dwLocalPlayer, NULL, sizeof(DWORD));
+		DWORD tempPlayer = (DWORD)ReadMemory(hProcess, dwLocalPlayer, NULL, sizeof(DWORD));
 		if (!tempPlayer) // client not connected to any server (works most of the time)
 		{
 			modelIndex = 0;
@@ -263,45 +280,45 @@ void xSkins(const short knifeIndex, const UINT knifeSkin)
 		for (UINT i = 0; i < 8; i++)
 		{
 			// get entity of weapon in current slot
-			DWORD currentWeapon = (DWORD)ReadMem(hProcess, localPlayer + m_hMyWeapons + i * 0x4, NULL, sizeof(DWORD)) & 0xfff;
-			currentWeapon = (DWORD)ReadMem(hProcess, dwEntityList + (currentWeapon - 1) * 0x10, NULL, sizeof(DWORD));
+			DWORD currentWeapon = (DWORD)ReadMemory(hProcess, localPlayer + m_hMyWeapons + i * 0x4, NULL, sizeof(DWORD)) & 0xfff;
+			currentWeapon = (DWORD)ReadMemory(hProcess, dwEntityList + (currentWeapon - 1) * 0x10, NULL, sizeof(DWORD));
 			if (!currentWeapon) { continue; }
 
-			short weaponIndex = (short)ReadMem(hProcess, currentWeapon + m_iItemDefinitionIndex, NULL, sizeof(short));
+			short weaponIndex = (short)ReadMemory(hProcess, currentWeapon + m_iItemDefinitionIndex, NULL, sizeof(short));
 			UINT weaponSkin = GetWeaponSkin(weaponIndex);
 
 			// for knives, set item and model related properties
 			if (weaponIndex == WEAPON_KNIFE || weaponIndex == WEAPON_KNIFE_T || weaponIndex == knifeIndex)
 			{
-				WriteMem(hProcess, currentWeapon + m_iItemDefinitionIndex, &knifeIndex, sizeof(short));
-				WriteMem(hProcess, currentWeapon + m_nModelIndex, &modelIndex, sizeof(UINT));
-				WriteMem(hProcess, currentWeapon + m_iViewModelIndex, &modelIndex, sizeof(UINT));
-				WriteMem(hProcess, currentWeapon + m_iEntityQuality, &entityQuality, sizeof(int));
+				WriteMemory(hProcess, currentWeapon + m_iItemDefinitionIndex, &knifeIndex, sizeof(short));
+				WriteMemory(hProcess, currentWeapon + m_nModelIndex, &modelIndex, sizeof(UINT));
+				WriteMemory(hProcess, currentWeapon + m_iViewModelIndex, &modelIndex, sizeof(UINT));
+				WriteMemory(hProcess, currentWeapon + m_iEntityQuality, &entityQuality, sizeof(int));
 				weaponSkin = knifeSkin;
 			}
 
 			if (weaponSkin) // set skin properties
 			{
-				WriteMem(hProcess, currentWeapon + m_iItemIDHigh, &itemIDHigh, sizeof(int));
-				WriteMem(hProcess, currentWeapon + m_nFallbackPaintKit, &weaponSkin, sizeof(UINT));
-				WriteMem(hProcess, currentWeapon + m_flFallbackWear, &fallbackWear, sizeof(float));
+				WriteMemory(hProcess, currentWeapon + m_iItemIDHigh, &itemIDHigh, sizeof(int));
+				WriteMemory(hProcess, currentWeapon + m_nFallbackPaintKit, &weaponSkin, sizeof(UINT));
+				WriteMemory(hProcess, currentWeapon + m_flFallbackWear, &fallbackWear, sizeof(float));
 			}
 		}
 
 		// get entity of weapon in our hands
-		DWORD activeWeapon = (DWORD)ReadMem(hProcess, localPlayer + m_hActiveWeapon, NULL, sizeof(DWORD)) & 0xfff;
-		activeWeapon = (DWORD)ReadMem(hProcess, dwEntityList + (activeWeapon - 1) * 0x10, NULL, sizeof(DWORD));
+		DWORD activeWeapon = (DWORD)ReadMemory(hProcess, localPlayer + m_hActiveWeapon, NULL, sizeof(DWORD)) & 0xfff;
+		activeWeapon = (DWORD)ReadMemory(hProcess, dwEntityList + (activeWeapon - 1) * 0x10, NULL, sizeof(DWORD));
 		if (!activeWeapon) { continue; }
 
-		short weaponIndex = (short)ReadMem(hProcess, activeWeapon + m_iItemDefinitionIndex, NULL, sizeof(short));
+		short weaponIndex = (short)ReadMemory(hProcess, activeWeapon + m_iItemDefinitionIndex, NULL, sizeof(short));
 		if (weaponIndex != knifeIndex) { continue; } // skip if current weapon is not already set to chosen knife
 
 		// get viewmodel entity
-		DWORD activeViewModel = (DWORD)ReadMem(hProcess, localPlayer + m_hViewModel, NULL, sizeof(DWORD)) & 0xfff;
-		activeViewModel = (DWORD)ReadMem(hProcess, dwEntityList + (activeViewModel - 1) * 0x10, NULL, sizeof(DWORD));
+		DWORD activeViewModel = (DWORD)ReadMemory(hProcess, localPlayer + m_hViewModel, NULL, sizeof(DWORD)) & 0xfff;
+		activeViewModel = (DWORD)ReadMemory(hProcess, dwEntityList + (activeViewModel - 1) * 0x10, NULL, sizeof(DWORD));
 		if (!activeViewModel) { continue; }
 
-		WriteMem(hProcess, activeViewModel + m_nModelIndex, &modelIndex, sizeof(UINT));
+		WriteMemory(hProcess, activeViewModel + m_nModelIndex, &modelIndex, sizeof(UINT));
 	}
 }
 
@@ -330,7 +347,7 @@ int main()
 	free(skinIDs);
 
 	DWORD dwProcessId = GetProcessIdByProcessName(_T("csgo.exe"));
-	printf("[+] csgo.exe process id: %d\n", dwProcessId);
+	printf("[+] csgo.exe process id: %u\n", dwProcessId);
 
 	DWORD dwClientBase = GetModuleBaseAddress(dwProcessId, _T("client_panorama.dll"));
 	printf("[+] client_panorama.dll base: 0x%x\n", dwClientBase);
@@ -352,34 +369,39 @@ int main()
 	}
 
 	PBYTE pbEngine = (PBYTE)malloc(dwEngineSize);
-	if (ReadMem(hProcess, dwEngineBase, pbEngine, dwEngineSize))
+	if (ReadMemory(hProcess, dwEngineBase, pbEngine, dwEngineSize))
 	{
-		BYTE bClientState[16] = "\xA1\xAA\xAA\xAA\xAA\x33\xD2\x6A\x00\x6A\x00\x33\xC9\x89\xB0";
-		dwClientState = FindPattern(hProcess,
+		dwClientState = FindPattern(pbEngine,
 			dwEngineBase,
 			dwEngineSize,
-			pbEngine,
-			bClientState,
-			sizeof(bClientState) - 1,
+			EXP("\xA1\xAA\xAA\xAA\xAA\x33\xD2\x6A\x00\x6A\x00\x33\xC9\x89\xB0"),
 			0xAA,
 			0x1,
 			0x0,
 			TRUE,
 			FALSE);
 		printf("[+] dwClientState: 0x%x\n", dwClientState);
+
+		m_dwModelPrecache = FindPattern(pbEngine,
+			dwEngineBase,
+			dwEngineSize,
+			EXP("\x0C\x3B\x81\xAA\xAA\xAA\xAA\x75\x11\x8B\x45\x10\x83\xF8\x01\x7C\x09\x50\x83"),
+			0xAA,
+			0x3,
+			0x0,
+			TRUE,
+			FALSE);
+		printf("[+] m_dwModelPrecache: 0x%x\n", m_dwModelPrecache);
 	}
 	free(pbEngine);
 
 	PBYTE pbClient = (PBYTE)malloc(dwClientSize);
-	if (ReadMem(hProcess, dwClientBase, pbClient, dwClientSize))
+	if (ReadMemory(hProcess, dwClientBase, pbClient, dwClientSize))
 	{
-		BYTE bEntityList[17] = "\xBB\xAA\xAA\xAA\xAA\x83\xFF\x01\x0F\x8C\xAA\xAA\xAA\xAA\x3B\xF8";
-		dwEntityList = FindPattern(hProcess,
+		dwEntityList = FindPattern(pbClient,
 			dwClientBase,
 			dwClientSize,
-			pbClient,
-			bEntityList,
-			sizeof(bEntityList) - 1,
+			EXP("\xBB\xAA\xAA\xAA\xAA\x83\xFF\x01\x0F\x8C\xAA\xAA\xAA\xAA\x3B\xF8"),
 			0xAA,
 			0x1,
 			0x0,
@@ -387,13 +409,10 @@ int main()
 			FALSE);
 		printf("[+] dwEntityList: 0x%x\n", dwEntityList);
 
-		BYTE bLocalPlayer[23] = "\x8D\x34\x85\xAA\xAA\xAA\xAA\x89\x15\xAA\xAA\xAA\xAA\x8B\x41\x08\x8B\x48\x04\x83\xF9\xFF";
-		dwLocalPlayer = FindPattern(hProcess,
+		dwLocalPlayer = FindPattern(pbClient,
 			dwClientBase,
 			dwClientSize,
-			pbClient,
-			bLocalPlayer,
-			sizeof(bLocalPlayer) - 1,
+			EXP("\x8D\x34\x85\xAA\xAA\xAA\xAA\x89\x15\xAA\xAA\xAA\xAA\x8B\x41\x08\x8B\x48\x04\x83\xF9\xFF"),
 			0xAA,
 			0x3,
 			0x4,
@@ -401,38 +420,26 @@ int main()
 			FALSE);
 		printf("[+] dwLocalPlayer: 0x%x\n", dwLocalPlayer);
 
-		BYTE bGetAllClasses[16] = "\x44\x54\x5F\x54\x45\x57\x6F\x72\x6C\x64\x44\x65\x63\x61\x6C";
-		DWORD dwGetAllClasses = FindPattern(hProcess,
+		DWORD dwGetAllClasses = FindPattern(pbClient,
 			dwClientBase,
 			dwClientSize,
-			pbClient,
-			bGetAllClasses,
-			sizeof(bGetAllClasses) - 1,
+			EXP("\x44\x54\x5F\x54\x45\x57\x6F\x72\x6C\x64\x44\x65\x63\x61\x6C"),
 			0xAA,
 			0x0,
 			0x0,
 			FALSE,
 			FALSE);
 
-		BYTE bGetAllClasses2[4] = {
-			(dwGetAllClasses >> 8 * 0) & 0xFF,
-			(dwGetAllClasses >> 8 * 1) & 0xFF,
-			(dwGetAllClasses >> 8 * 2) & 0xFF,
-			(dwGetAllClasses >> 8 * 3) & 0xFF
-		};
-
-		dwGetAllClasses = FindPattern(hProcess,
+		dwGetAllClasses = FindPattern(pbClient,
 			dwClientBase,
 			dwClientSize,
-			pbClient,
-			bGetAllClasses2,
-			sizeof(bGetAllClasses2),
-			0x00,
+			(PBYTE)&dwGetAllClasses,
+			sizeof(PBYTE),
+			0x0,
 			0x2B,
 			0x0,
 			TRUE,
 			FALSE);
-		printf("[+] dwGetAllClasses: 0x%x\n", dwGetAllClasses);
 
 		m_hViewModel = FindNetvar(hProcess, dwGetAllClasses, "DT_BasePlayer", "m_hViewModel[0]");
 		printf("[+] m_hViewModel: 0x%x\n", m_hViewModel);
@@ -478,9 +485,9 @@ int main()
 		m_iItemDefinitionIndex &&
 		m_hActiveWeapon &&
 		m_hMyWeapons &&
-		m_nModelIndex)
+		m_nModelIndex &&
+		m_dwModelPrecache)
 	{
-		// start main thread
 		xSkins(knifeIDs[knifeID], skinID);
 	}
 

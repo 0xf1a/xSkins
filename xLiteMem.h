@@ -3,10 +3,29 @@
 #include <TlHelp32.h>
 #include <tchar.h>
 
+// Expand byte pattern
+#define EXP(x) x, sizeof(x) - 1
+
+#define nCRecvPropSize 0x3C
+
+// CRecvProp struct offsets
+#define m_pVarName 0x0
+#define m_pDataTable 0x28
+#define m_iOffset 0x2C
+
+// CRecvTable struct offsets
+#define m_pProps 0x0
+#define m_nProps 0x4
+#define m_pNetTableName 0xC
+
+// CClientClass struct offsets
+#define m_pRecvTable 0xC
+#define m_pNext 0x10
+
 /*
-** WinAPI process and memory functions
+** WinAPI process and memory wrappers
 */
-DWORD GetProcessIdByProcessName(LPCTSTR name)
+DWORD GetProcessIdByProcessName(LPCTSTR lpName)
 {
 	DWORD dwPid = 0;
 
@@ -22,7 +41,7 @@ DWORD GetProcessIdByProcessName(LPCTSTR name)
 		{
 			do
 			{
-				if (_tcsicmp(ProcessEntry32.szExeFile, name) == 0)
+				if (_tcsicmp(ProcessEntry32.szExeFile, lpName) == 0)
 				{
 					dwPid = ProcessEntry32.th32ProcessID;
 					break;
@@ -35,12 +54,12 @@ DWORD GetProcessIdByProcessName(LPCTSTR name)
 
 	return dwPid;
 }
-DWORD GetProcessIdByWindowName(LPCTSTR name)
+DWORD GetProcessIdByWindowName(LPCTSTR lpName)
 {
 	DWORD dwPid = 0;
 
 	do {
-		HWND hWindow = FindWindow(NULL, name);
+		HWND hWindow = FindWindow(NULL, lpName);
 		if (!hWindow) { continue; }
 		GetWindowThreadProcessId(hWindow, &dwPid);
 		if (hWindow) { CloseHandle(hWindow); }
@@ -48,12 +67,12 @@ DWORD GetProcessIdByWindowName(LPCTSTR name)
 
 	return dwPid;
 }
-DWORD GetModuleBaseAddress(DWORD pid, LPCTSTR name)
+DWORD GetModuleBaseAddress(DWORD dwPid, LPCTSTR lpName)
 {
 	DWORD dwBase = 0;
 
 	do {
-		HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+		HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, dwPid);
 		if (hSnapshot == INVALID_HANDLE_VALUE) { continue; }
 
 		MODULEENTRY32 ModuleEntry32;
@@ -63,7 +82,7 @@ DWORD GetModuleBaseAddress(DWORD pid, LPCTSTR name)
 		{
 			do
 			{
-				if (_tcsicmp(ModuleEntry32.szModule, name) == 0)
+				if (_tcsicmp(ModuleEntry32.szModule, lpName) == 0)
 				{
 					dwBase = (DWORD)ModuleEntry32.modBaseAddr;
 					break;
@@ -76,12 +95,12 @@ DWORD GetModuleBaseAddress(DWORD pid, LPCTSTR name)
 
 	return dwBase;
 }
-DWORD GetModuleSize(DWORD pid, LPCTSTR name)
+DWORD GetModuleSize(DWORD dwPid, LPCTSTR lpName)
 {
 	DWORD dwSize = 0;
 
 	do {
-		HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+		HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, dwPid);
 		if (hSnapshot == INVALID_HANDLE_VALUE) { continue; }
 
 		MODULEENTRY32 ModuleEntry32;
@@ -91,7 +110,7 @@ DWORD GetModuleSize(DWORD pid, LPCTSTR name)
 		{
 			do
 			{
-				if (_tcsicmp(ModuleEntry32.szModule, name) == 0)
+				if (_tcsicmp(ModuleEntry32.szModule, lpName) == 0)
 				{
 					dwSize = ModuleEntry32.modBaseSize;
 					break;
@@ -104,25 +123,25 @@ DWORD GetModuleSize(DWORD pid, LPCTSTR name)
 
 	return dwSize;
 }
-PVOID ReadMem(HANDLE process, DWORD address, LPVOID buffer, DWORD size)
+PVOID ReadMemory(HANDLE hProcess, DWORD dwAddr, LPVOID lpBuffer, DWORD dwSize)
 {
 	PVOID ret = 0;
-	BOOL status = ReadProcessMemory(process, (LPCVOID)(address), buffer ? buffer : &ret, size, NULL);
-	return buffer ? (PVOID)status : ret;
+	BOOL status = ReadProcessMemory(hProcess, (LPCVOID)(dwAddr), lpBuffer ? lpBuffer : &ret, dwSize, NULL);
+	return lpBuffer ? (PVOID)status : ret;
 }
-BOOL WriteMem(HANDLE process, DWORD address, LPCVOID buffer, DWORD size)
+BOOL WriteMemory(HANDLE hProcess, DWORD dwAddr, LPCVOID lpBuffer, DWORD dwSize)
 {
-	return WriteProcessMemory(process, (LPVOID)(address), buffer, size, NULL);
+	return WriteProcessMemory(hProcess, (LPVOID)(dwAddr), lpBuffer, dwSize, NULL);
 }
 
 /*
 ** Offset scanning functions
 */
-BOOLEAN CompareBytes(PBYTE bytes, PBYTE pattern, UINT length, UCHAR wildcard)
+BOOLEAN CheckPattern(PBYTE pbBytes, PBYTE pbPattern, UINT uLength, UCHAR bWildcard)
 {
-	for (UINT i = 0; i < length; i++)
+	for (UINT i = 0; i < uLength; i++)
 	{
-		if (pattern[i] != wildcard && bytes[i] != pattern[i])
+		if (pbPattern[i] != bWildcard && pbBytes[i] != pbPattern[i])
 		{
 			return FALSE;
 		}
@@ -130,58 +149,57 @@ BOOLEAN CompareBytes(PBYTE bytes, PBYTE pattern, UINT length, UCHAR wildcard)
 
 	return TRUE;
 }
-DWORD FindPattern(HANDLE process, DWORD base, DWORD size, PBYTE bytes, PBYTE pattern, UINT length,
-	UCHAR wildcard, UINT offset, UINT extra, BOOLEAN relative, BOOLEAN subtract)
+DWORD FindPattern(PBYTE pbBuffer, DWORD dwBase, DWORD dwSize, PBYTE pbPattern, UINT uLength,
+	UCHAR bWildcard, UINT uOffset, UINT uExtra, BOOLEAN bRelative, BOOLEAN bSubtract)
 {
 	DWORD dwAddress = 0;
 
-	for (DWORD i = 0; i < size - length; i++)
+	for (DWORD i = 0; i < dwSize - uLength; i++)
 	{
-		if (CompareBytes(bytes + i, pattern, length, wildcard))
+		if (CheckPattern(pbBuffer + i, pbPattern, uLength, bWildcard))
 		{
-			dwAddress = base + i + offset;
+			dwAddress = dwBase + i + uOffset;
 
-			if (relative)
+			if (bRelative)
 			{
-				dwAddress = (DWORD)ReadMem(process, dwAddress, NULL, sizeof(DWORD));
-			}
-			if (subtract)
-			{
-				dwAddress -= base;
+				dwAddress = *(DWORD*)(pbBuffer + i + uOffset);
 			}
 
-			dwAddress += extra;
+			if (bSubtract)
+			{
+				dwAddress -= dwBase;
+			}
+
+			dwAddress += uExtra;
 			break;
 		}
-
 	}
 
 	return dwAddress;
 }
-DWORD ChunkFindPattern(HANDLE process, DWORD base, DWORD size, DWORD chunk, PBYTE pattern, UINT length,
-	UCHAR wildcard, UINT offset, UINT extra, BOOLEAN relative, BOOLEAN subtract)
+DWORD ChunkFindPattern(HANDLE hProcess, DWORD dwBase, DWORD dwSize, DWORD dwChunkSize, PBYTE pbPattern,
+	UINT uLength, UCHAR bWildcard, UINT uOffset, UINT uExtra, BOOLEAN bRelative, BOOLEAN bSubtract)
 {
 	// both variables start from 0x1000 in order to skip PE header
 	DWORD x = 0x1000; // counter variable
-	DWORD i = base + 0x1000; // current virtual address
+	DWORD i = dwBase + 0x1000; // current virtual address
 	DWORD dwAddress = 0;
 
-	for (; i < base + size; i += chunk, x += chunk)
+	for (; i < dwBase + dwSize; i += dwChunkSize, x += dwChunkSize)
 	{
-		PBYTE pbChunk = (PBYTE)malloc(chunk); // allocate space for chunk using defined size
-		if (ReadMem(process, i, pbChunk, chunk)) // read and scan through current memory chunk
+		PBYTE pbChunk = (PBYTE)malloc(dwChunkSize); // allocate space for chunk using defined size
+		if (ReadMemory(hProcess, i, pbChunk, dwChunkSize)) // read and scan through current memory chunk
 		{
-			dwAddress = FindPattern(process,
+			dwAddress = FindPattern(pbChunk,
 				i,
-				chunk,
-				pbChunk,
-				pattern,
-				length,
-				wildcard,
-				offset,
-				extra,
-				relative,
-				subtract);
+				dwChunkSize,
+				pbPattern,
+				uLength,
+				bWildcard,
+				uOffset,
+				uExtra,
+				bRelative,
+				bSubtract);
 
 			if (dwAddress)
 			{
@@ -199,91 +217,91 @@ DWORD ChunkFindPattern(HANDLE process, DWORD base, DWORD size, DWORD chunk, PBYT
 /*
 ** Reversed Source SDK netvar classes
 */
-BOOL GetPropName(HANDLE process, DWORD address, PVOID buffer) // CRecvProp
+BOOL GetPropName(HANDLE hProcess, DWORD dwAddress, PVOID pBuffer)
 {
 	DWORD dwNameAddr;
-	return ReadMem(process, address + 0x0, &dwNameAddr, sizeof(DWORD)) &&
-		ReadMem(process, dwNameAddr, buffer, 128);
+	return ReadMemory(hProcess, dwAddress + m_pVarName, &dwNameAddr, sizeof(DWORD)) &&
+		ReadMemory(hProcess, dwNameAddr, pBuffer, 128);
 }
-DWORD GetDataTable(HANDLE process, DWORD address) // CRecvProp
+DWORD GetDataTable(HANDLE hProcess, DWORD dwAddress)
 {
-	return (DWORD)ReadMem(process, address + 0x28, NULL, sizeof(DWORD));
+	return (DWORD)ReadMemory(hProcess, dwAddress + m_pDataTable, NULL, sizeof(DWORD));
 }
-int GetOffset(HANDLE process, DWORD address) // CRecvProp
+int GetOffset(HANDLE hProcess, DWORD dwAddress)
 {
-	return (int)ReadMem(process, address + 0x2C, NULL, sizeof(int));
+	return (int)ReadMemory(hProcess, dwAddress + m_iOffset, NULL, sizeof(int));
 }
-DWORD GetPropById(HANDLE process, DWORD address, int index) // CRecvTable
+DWORD GetPropById(HANDLE hProcess, DWORD dwAddress, int iIndex)
 {
-	DWORD dwPropAddr = (DWORD)ReadMem(process, address + 0x0, NULL, sizeof(DWORD));
-	return (DWORD)(dwPropAddr + 0x3C * index);
+	DWORD dwPropAddr = (DWORD)ReadMemory(hProcess, dwAddress + m_pProps, NULL, sizeof(DWORD));
+	return (DWORD)(dwPropAddr + nCRecvPropSize * iIndex);
 }
-int GetPropCount(HANDLE process, DWORD address) // CRecvTable
+int GetPropCount(HANDLE hProcess, DWORD dwAddress)
 {
-	return (int)ReadMem(process, address + 0x4, NULL, sizeof(int));
+	return (int)ReadMemory(hProcess, dwAddress + m_nProps, NULL, sizeof(int));
 }
-BOOL GetTableName(HANDLE process, DWORD address, PVOID buffer) // CRecvTable
+BOOL GetTableName(HANDLE hProcess, DWORD dwAddress, PVOID pBuffer)
 {
 	DWORD dwNameAddr;
-	return ReadMem(process, address + 0xC, &dwNameAddr, sizeof(DWORD)) &&
-		ReadMem(process, dwNameAddr, buffer, 128);
+	return ReadMemory(hProcess, dwAddress + m_pNetTableName, &dwNameAddr, sizeof(DWORD)) &&
+		ReadMemory(hProcess, dwNameAddr, pBuffer, 128);
 }
-DWORD GetTable(HANDLE process, DWORD address) // CClientClass
+DWORD GetTable(HANDLE hProcess, DWORD dwAddress)
 {
-	return (DWORD)ReadMem(process, address + 0xC, NULL, sizeof(DWORD));
+	return (DWORD)ReadMemory(hProcess, dwAddress + m_pRecvTable, NULL, sizeof(DWORD));
 }
-DWORD GetNextClass(HANDLE process, DWORD address) // CClientClass
+DWORD GetNextClass(HANDLE hProcess, DWORD dwAddress)
 {
-	return (DWORD)ReadMem(process, address + 0x10, NULL, sizeof(DWORD));
+	return (DWORD)ReadMemory(hProcess, dwAddress + m_pNext, NULL, sizeof(DWORD));
 }
 
 /*
 ** Netvar scanning functions
 */
-DWORD ScanTable(HANDLE handle, DWORD table, LPCSTR varname, DWORD level)
+DWORD ScanTable(HANDLE hProcess, DWORD dwTableAddr, LPCSTR lpVarName, DWORD dwLevel)
 {
-	for (int i = 0; i < GetPropCount(handle, table); i++)
+	for (int i = 0; i < GetPropCount(hProcess, dwTableAddr); i++)
 	{
-		DWORD dwPropAddr = GetPropById(handle, table, i);
+		DWORD dwPropAddr = GetPropById(hProcess, dwTableAddr, i);
 		if (!dwPropAddr) { continue; }
 
 		char szPropName[128] = { 0 };
-		if (!GetPropName(handle, dwPropAddr, szPropName) ||
-			isdigit(szPropName[0])) {
+		if (!GetPropName(hProcess, dwPropAddr, szPropName) || isdigit(szPropName[0]))
+		{
 			continue;
 		}
 
-		int iOffset = GetOffset(handle, dwPropAddr);
+		int iOffset = GetOffset(hProcess, dwPropAddr);
 
-		if (_stricmp(szPropName, varname) == 0)
+		if (_stricmp(szPropName, lpVarName) == 0)
 		{
-			return level + iOffset;
+			return dwLevel + iOffset;
 		}
 
-		DWORD dwTableAddr = GetDataTable(handle, dwPropAddr);
+		DWORD dwTableAddr = GetDataTable(hProcess, dwPropAddr);
 		if (!dwTableAddr) { continue; }
 
-		DWORD dwRes = ScanTable(handle, dwTableAddr, varname, level + iOffset);
-		if (dwRes)
+		DWORD dwResult = ScanTable(hProcess, dwTableAddr, lpVarName, dwLevel + iOffset);
+		if (dwResult)
 		{
-			return dwRes;
+			return dwResult;
 		}
 	}
 
 	return 0;
 }
-DWORD FindNetvar(HANDLE handle, DWORD start, LPCSTR classname, LPCSTR varname)
+DWORD FindNetvar(HANDLE hProcess, DWORD dwStart, LPCSTR lpClassName, LPCSTR lpVarName)
 {
-	for (DWORD dwClass = start; dwClass; dwClass = GetNextClass(handle, dwClass))
+	for (DWORD dwClass = dwStart; dwClass; dwClass = GetNextClass(hProcess, dwClass))
 	{
-		DWORD dwTableAddr = GetTable(handle, dwClass);
+		DWORD dwTableAddr = GetTable(hProcess, dwClass);
 
 		char szTableName[128] = { 0 };
-		if (!GetTableName(handle, dwTableAddr, szTableName)) { continue; }
+		if (!GetTableName(hProcess, dwTableAddr, szTableName)) { continue; }
 
-		if (_stricmp(szTableName, classname) == 0)
+		if (_stricmp(szTableName, lpClassName) == 0)
 		{
-			return ScanTable(handle, dwTableAddr, varname, 0);
+			return ScanTable(hProcess, dwTableAddr, lpVarName, 0);
 		}
 	}
 

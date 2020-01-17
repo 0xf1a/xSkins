@@ -5,7 +5,7 @@
 ## Features
 
 - Optimized and faster than any other external skin changer
-- Self-updates using an external memory library ([xLiteMem](https://github.com/0xf1a/xLiteMem))
+- Self-updates using an external memory library: [xLiteMem](https://github.com/0xf1a/xLiteMem)
 - Small console menu for selecting knife models and skins
 - Parser for loading skin values from a .txt file
 
@@ -20,7 +20,8 @@ Visual Studio 2017 15.5 started setting the /permissive- flag for all new soluti
 ## Credits
 
 - BuckshotYT for [GetModelIndex method](https://www.unknowncheats.me/forum/counterstrike-global-offensive/212036-model-indices-properly-externally.html)
-- tracersgta for [skin list](https://www.unknowncheats.me/forum/counterstrike-global-offensive/300854-skin-list-ids-comments.html)
+- tracersgta for [formatted skin names](https://www.unknowncheats.me/forum/counterstrike-global-offensive/300854-skin-list-ids-comments.html)
+- adamb70 for [up to date skin dumps](https://github.com/adamb70/CSGO-skin-ID-dumper/)
 
 ## Important
 
