@@ -349,11 +349,11 @@ int main()
 	DWORD dwProcessId = GetProcessIdByProcessName(_T("csgo.exe"));
 	printf("[+] csgo.exe process id: %u\n", dwProcessId);
 
-	DWORD dwClientBase = GetModuleBaseAddress(dwProcessId, _T("client_panorama.dll"));
-	printf("[+] client_panorama.dll base: 0x%x\n", dwClientBase);
+	DWORD dwClientBase = GetModuleBaseAddress(dwProcessId, _T("client.dll"));
+	printf("[+] client.dll base: 0x%x\n", dwClientBase);
 
-	DWORD dwClientSize = GetModuleSize(dwProcessId, _T("client_panorama.dll"));
-	printf("[+] client_panorama.dll size: 0x%x\n", dwClientSize);
+	DWORD dwClientSize = GetModuleSize(dwProcessId, _T("client.dll"));
+	printf("[+] client.dll size: 0x%x\n", dwClientSize);
 
 	DWORD dwEngineBase = GetModuleBaseAddress(dwProcessId, _T("engine.dll"));
 	printf("[+] engine.dll base: 0x%x\n", dwEngineBase);
